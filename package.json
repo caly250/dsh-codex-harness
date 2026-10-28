@@ -1,0 +1,28 @@
+{
+  "name": "dsh-codex-harness",
+  "version": "0.4.0",
+  "description": "Codex 风格编码预设（DSH 0.2.x 重构版）：纯声明式 agent preset，注入 Codex persona 与行为纪律提示词，工具集与官方 standard 预设对齐。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh-preset",
+    "codex",
+    "codex-harness",
+    "coding-agent",
+    "agent-preset"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "cordis.patch.yml",
+    "README.md",
+    "NOTICE",
+    "package.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

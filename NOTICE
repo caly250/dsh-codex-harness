@@ -1,0 +1,12 @@
+dsh-codex-harness 0.4.0 (refactored)
+
+Prompt text (Codex persona, editing constraints, working principles)
+originates with @shuind/dsh-codex-harness by shuind
+(https://github.com/shuind/dsh-codex-harness), MIT licensed.
+
+The DSH 0.2.x port structure was carried forward from
+@lejvn/dsh-codex-harness 0.3.0 by lejvn, MIT licensed.
+
+This 0.4.0 refactor rewrites the bundle as a purely declarative agent
+preset and genuinely injects the Codex persona and behavioral-discipline
+prompt via @deepseek-ai/dsh-persona.

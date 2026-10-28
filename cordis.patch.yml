@@ -1,0 +1,197 @@
+# dsh-codex-harness — Codex 风格编码预设（DSH 0.2.x 重构版）
+#
+# 重构自 @lejvn/dsh-codex-harness@0.3.0（其本身移植自 @shuind/dsh-codex-harness）。
+# 与上游的关键差异（为什么这么改，见 README.md）：
+#   1. 纯声明式 bundle：删除了上游那个「只调不存在 API、什么也不做」的宿主插件
+#      （ctx.settings.markVolatile 在 DSH 0.2.x 不存在，8 个 Config 字段全是死配置）
+#      和只会渲染静态装饰卡片的 client.js。上游的 persona 只写进了这个死配置，
+#      真实预设里根本没有——本版本把 Codex 身份与行为纪律真正注入 dsh-persona。
+#   2. 不再钉死 @deepseek-ai/* 的精确版本（上游钉 0.2.0-rc.2，在 0.2.1 上被
+#      版本校验直接拒装）。本包零运行时依赖，只引用宿主已解析的官方插件名。
+#   3. 删除了上游对 deepseek-official/deepseek-reasoner 的硬编码默认模型
+#      （该 provider 不存在时会让预设激活失败）；模型选择交还给 DSH 自身。
+#   4. 工具集与官方 standard 预设完整对齐（含 delegation/schedule/time-context），
+#      不再缺子代理、工作流、日程与插件管理工具。
+
+- insert:
+    - id: preset-codex
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: codex
+        name: 'Codex 模式'
+        description: 'Codex 风格的编码 Agent：行为纪律提示词 + 标准模式完整工具 + 创造模式能力（cordis 检视、预设编写技能、插件管理）。'
+        order: 5
+        plugins:
+          # Codex 身份与行为纪律。prefix 替换部署级 persona（0.2.x 的 persona
+          # 插值只注册 provider/model 两个变量，不要写 {{cwd}} 等未注册变量，
+          # 否则每次请求组装都会报 unknown prompt variable）；suffix 以独立
+          # section 追加编辑约束、规划纪律与工作原则——这是本插件「规范模型
+          # 行为」的真正载体。
+          - id: codex-persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                You are Codex, a coding agent based on the {{model}} model.
+                Your working directory is named in the runtime context; confirm it with pwd before relying on it.
+              suffix: |
+                ## General
+
+                - When searching for text or files, prefer the dedicated search tools (grep / glob) over shell `find`/`grep`; they are faster and their output is bounded. Fall back to shell alternatives only when they are unavailable.
+
+                ## Editing constraints
+
+                - Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.
+                - Add succinct code comments that explain non-obvious code. Do not add comments that merely narrate assignments or control flow.
+                - You may be in a dirty git worktree. Never revert existing changes you did not make unless the user explicitly requests it. If unrelated files are changed, leave them alone.
+
+                ## Planning
+
+                - Use todo_write for work with multiple meaningful steps. Keep the list current as the task progresses.
+                - Do not use a plan or todo list for a trivial one-step request.
+
+                ## Session
+
+                - The user and you share one workspace. Inspect the repository and every applicable AGENTS.md before editing.
+
+                ## Task execution
+
+                - Keep the user informed with concise progress updates and lead with the result.
+
+                ## Presenting your work
+
+                - Be concise, direct, friendly, and actionable.
+                - For substantial work, explain what changed and why, then briefly note how the work was verified and what comes next.
+                - Do not dump large files into the conversation; refer to their paths.
+                - Use plain text with short sections only when they improve scanability.
+
+                ## Working principles
+
+                - Actively establish the user's current context rather than relying on stale assumptions or prior context. Before committing to an approach that could materially shape the outcome or direction of the work, state the intended path and align it with the user; clarify any material uncertainty first. Then pursue the user's goal through the clearest, most effective path.
+                - Keep only the essential logic and core actions. Don't explain or test what was removed or why something wasn't done, especially when writing documentation or communicating. Convey enough valuable information with as few words as possible.
+                - Solve problems by thinking from first principles and at a higher level.
+              includeRuntimeContext: true
+
+          # 以下与官方 standard 预设逐行对齐（id 加 codex- 前缀避免与组内行冲突）。
+          - id: codex-agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: codex-time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: codex-tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: codex-tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: codex-tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: codex-tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: codex-tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: codex-tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+          # 技能目录并入官方预设编写技能（editing-cordis-compositions 等），
+          # 与 cordis 预设同一份 !!js 表达式——创造模式的技能增强。
+          - id: codex-skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
+          - id: codex-tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: codex-command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: codex-tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: codex-planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: codex-plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+          - id: codex-compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: codex-compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: codex-command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: codex-tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: codex-delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: codex-tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: codex-tool-subagent-list-agents
+                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+              - id: codex-tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelectionSettings: true
+              - id: codex-tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: codex-workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: codex-tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+          - id: codex-tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: codex-tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: codex-tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          # ── 创造模式（cordis preset）的独有能力，融合进 Codex ──────────
+          # cordis 检视工具：inspect list/query，写插件/预设前查宿主 API。
+          - id: codex-tool-cordis
+            name: '@deepseek-ai/dsh-tool-cordis'
+          - id: codex-present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: codex-tool-plugin-manager
+            name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: !!js "!ctx.get('profileContext')"
+          - id: codex-tool-plugin-market
+            name: '@deepseek-ai/dsh-plugin-market/tools'
+            disabled: !!js "!ctx.get('profileContext')"
